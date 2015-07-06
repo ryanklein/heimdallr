@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+#
+# Name: heimdallr
+
+==begin
+Created by Ryan Klein (@ryanklein).
+
+This application will add IP addresses and/or networks provided as an argument
+or from a file to prefix-list on Juniper SRX firewalls with the intention of
+blocking IP addresses at the interface. It is designed to solve a scaling
+problem where rather than manually making changes to each firewall individually
+it will push to all firewalls at the same time.
+
+==end
+
+==begin
+Include the required libraries or produce an error if they do not exist in the
+expected path.
+==end
+
+begin
+  require 'net/netconf'
+  require 'nokogiri'
+  require 'io/console'
+rescue LoadError => load_error
+  puts("Cannot find '#{load_error.path}' library, please install it via Ruby gems and try again.")
+  exit!
+end
