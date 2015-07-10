@@ -2,7 +2,7 @@
 #
 # Name: heimdallr
 
-==begin
+=begin
 Created by Ryan Klein (@ryanklein).
 
 This application will add IP addresses and/or networks provided as an argument
@@ -10,14 +10,17 @@ or from a file to prefix-list on Juniper SRX firewalls with the intention of
 blocking IP addresses at the interface. It is designed to solve a scaling
 problem where rather than manually making changes to each firewall individually
 it will push to all firewalls at the same time.
+=end
 
-==end
+=begin
+Set our current version number
+=end
+VERSION = 1.0
 
-==begin
+=begin
 Include the required libraries or produce an error if they do not exist in the
 expected path.
-==end
-
+=end
 begin
   require 'net/netconf'
   require 'nokogiri'
@@ -25,4 +28,31 @@ begin
 rescue LoadError => load_error
   puts("Cannot find '#{load_error.path}' library, please install it via Ruby gems and try again.")
   exit!
+end
+
+=begin
+Evaluate the options passed, print a help message if there are no options provided.
+=end
+if ARGV.empty? == true or ARGV.include?('--help') == true or ARGV.include?('-h') == true then
+  puts("This application will push one or more IP addresses or networks to a prefix-list on Juniper SRX firewalls.")
+  puts("")
+  puts("Options:")
+  puts("--config       Specify the location of the configuration file or use default (optional)")
+  puts("--help         Display this help message")
+  puts('')
+  exit!
+end
+
+=begin
+Ensure that the configuration file is properly loaded via an argument or the
+default location.
+=end
+if ARGV.include?('--config') then
+  config = ARGV[(ARGV.index('--config').to_i + 1)]
+else
+  config = '/etc/hemdallr/hemdallr.conf'
+end
+
+if File.exist?(config) == false && File.readable?(config) == false then
+  puts("Unable to read the configuration file or the configuration file at #{config} as it doesn't exist.")
 end
