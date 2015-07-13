@@ -31,6 +31,23 @@ rescue LoadError => load_error
 end
 
 =begin
+Method to evaluate the configuration file and return the value(s) for the parameter passed.
+=end
+def config_eval(parameter)
+  @parameter = parameter
+  $configuration = File.open($configuration, 'r')
+  # Delete lines that start with a pound sign or a new line
+  $configuration.readlines.each do |line|
+    if line.start_with?(@parameter) == true then
+      @key = line.split(":").collect{|a| a.strip}[0]
+      @values = line.split(":").collect{|a| a.strip}[1].split(",").collect{|b| b.strip}
+      @request = {@key.to_s => @values}
+      return @request
+    end
+  end
+end
+
+=begin
 Evaluate the options passed, print a help message if there are no options provided.
 =end
 if ARGV.empty? == true or ARGV.include?('--help') == true or ARGV.include?('-h') == true then
@@ -48,11 +65,22 @@ Ensure that the configuration file is properly loaded via an argument or the
 default location.
 =end
 if ARGV.include?('--config') then
-  config = ARGV[(ARGV.index('--config').to_i + 1)]
+  $configuration = ARGV[(ARGV.index('--config').to_i + 1)]
 else
-  config = '/etc/hemdallr/hemdallr.conf'
+  $configuration = '/etc/heimdallr/heimdallr.conf'
 end
 
-if File.exist?(config) == false && File.readable?(config) == false then
-  puts("Unable to read the configuration file or the configuration file at #{config} as it doesn't exist.")
+if File.exist?($configuration) == false && File.readable?($configuration) == false then
+  puts("Unable to read the configuration file or the configuration file at #{$configuration} as it doesn't exist.")
+  exit!
+end
+
+=begin
+
+=end
+begin
+  firewalls = config_eval("firewalls")
+  prefix_list = config_eval("prefix-list")
+rescue
+
 end
