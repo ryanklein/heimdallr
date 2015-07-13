@@ -25,6 +25,7 @@ begin
   require 'net/netconf'
   require 'nokogiri'
   require 'io/console'
+  require 'ipaddress'
 rescue LoadError => load_error
   puts("Cannot find '#{load_error.path}' library, please install it via Ruby gems and try again.")
   exit!
@@ -41,10 +42,25 @@ def config_eval(parameter)
     if line.start_with?(@parameter) == true then
       @key = line.split(":").collect{|a| a.strip}[0]
       @values = line.split(":").collect{|a| a.strip}[1].split(",").collect{|b| b.strip}
-      @request = {@key.to_s => @values}
+      @request = {:"#{@key.to_s}" => @values}
       return @request
     end
   end
+end
+
+=begin
+Method to evaluate the IP addresses to ensure they are valid. It will return an array of valid IP addresses
+=end
+def ipaddress_eval(parameter)
+  @parameter = parameter
+  @ipaddresses = Array.new
+  @parameter.split(',').each do |ipaddress|
+    ipaddress = IPAddress::IPv4.new(ipaddress.strip)
+    if ipaddress.ipv4? == true then
+      @ipaddresses.push(ipaddress.to_string)
+    end
+  end
+  return @ipaddresses
 end
 
 =begin
@@ -55,6 +71,9 @@ if ARGV.empty? == true or ARGV.include?('--help') == true or ARGV.include?('-h')
   puts("")
   puts("Options:")
   puts("--config       Specify the location of the configuration file or use default (optional)")
+  puts("--username     Specify the username to authenticate as")
+  puts("--ipaddress    A comma seperated list of IP addresses that should be added to the prefix-list (must be in quotes)")
+  puts("--comment      Specify a comment to add to the commit (must be in quotes)")
   puts("--help         Display this help message")
   puts('')
   exit!
@@ -75,12 +94,69 @@ if File.exist?($configuration) == false && File.readable?($configuration) == fal
   exit!
 end
 
-=begin
+print("Please enter your TACACS password: "); password = STDIN.noecho(&:gets).chomp.strip
+puts("\n")
 
+firewalls = config_eval("firewalls")
+prefix_list = config_eval("prefix-list-name")[:"prefix-list-name"][0]
+username = ARGV[(ARGV.index('--username').to_i + 1)].downcase.strip
+ipaddresses = ipaddress_eval(ARGV[(ARGV.index('--ipaddress').to_i + 1)])
+comment = ARGV[(ARGV.index('--comment').to_i + 1)].strip
+
+=begin
+Build the XML configuration to be pushed to the firewalls.
 =end
 begin
-  firewalls = config_eval("firewalls")
-  prefix_list = config_eval("prefix-list")
-rescue
-
+  xml_config = Nokogiri::XML::Builder.new{|conf|
+    conf.configuration{
+      conf.send(:'policy-options'){
+        conf.send(:'prefix-list'){
+          conf.name("#{prefix_list}")
+          # Iterate through each IP address in the array.
+          ipaddresses.each do |ipaddress|
+            conf.send(:'prefix-list-item'){
+              conf.name("#{ipaddress.to_s}")
+            }
+          end
+        }
+      }
+    }
+  }
 end
+
+=begin
+Loop through the firewalls and push the same XML scheme to all Juniper SRX firewalls.
+=end
+firewalls[:firewalls].each do |firewall|
+  login = { :target => firewall, :username => username, :password => password}
+
+  puts("Connecting to #{firewall}...")
+  Netconf::SSH.new(login){ |c|
+    target = 'candidate'
+    begin
+      rsp = c.rpc.lock target
+      rsp = c.rpc.edit_config(xml_config)
+      rsp = c.rpc.validate target
+      if comment.empty? == true then
+        rpc = c.rpc.commit_configuration(log: "#{commit_comment}")
+      else
+        rpc = c.rpc.commit_configuration
+      end
+      rpc = c.rpc.unlock target
+
+    rescue Netconf::LockError => e
+      puts "Lock error: #{e.inspect}"
+    rescue Netconf::EditError => e
+      puts "Edit error: #{e.inspect}"
+    rescue Netconf::ValidateError => e
+      puts "Validate error: #{e.inspect}"
+    rescue Netconf::CommitError => e
+      puts "Commit error: #{e.inspect}"
+    rescue Netconf::RpcError => e
+      puts "General RPC error: #{e.inspect}"
+    else
+      puts "Configuration committed to #{firewall}"
+    end
+  }
+end
+puts('')
