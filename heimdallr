@@ -32,23 +32,6 @@ rescue LoadError => load_error
 end
 
 =begin
-Method to evaluate the configuration file and return the value(s) for the parameter passed.
-=end
-def config_eval(parameter)
-  @parameter = parameter
-  $configuration = File.open($configuration, 'r')
-  # Delete lines that start with a pound sign or a new line
-  $configuration.readlines.each do |line|
-    if line.start_with?(@parameter) == true then
-      @key = line.split(":").collect{|a| a.strip}[0]
-      @values = line.split(":").collect{|a| a.strip}[1].split(",").collect{|b| b.strip}
-      @request = {:"#{@key.to_s}" => @values}
-      return @request
-    end
-  end
-end
-
-=begin
 Method to evaluate the IP addresses to ensure they are valid. It will return an array of valid IP addresses
 =end
 def ipaddress_eval(parameter)
@@ -97,11 +80,43 @@ end
 print("Please enter your TACACS password: "); password = STDIN.noecho(&:gets).chomp.strip
 puts("\n")
 
-firewalls = config_eval("firewalls")
-prefix_list = config_eval("prefix-list-name")[:"prefix-list-name"][0]
+=begin
+Evaluate the configuration file and create a hash of the options
+=end
+options = Hash.new
+File.open($configuration, 'r').readlines.each do |line|
+  if line.chomp.start_with?("#") == false and line.chomp.empty? == false then
+    # Determine our key based on what prefaces the colon
+    key = line.split(":").collect{|a| a.strip}[0].chomp
+    # Determine the value(s) for the key based on what follows the colon
+    values = line.split(":").collect{|a| a.strip}[1]
+    if values.include?(',') then
+      values = values.split(",").collect{|b| b.strip}
+    else
+      values = ["#{values}"]
+    end
+    # Add  the key/value pair to the hash
+    options["#{key}"] = values
+  end
+end
+#firewalls = config_eval("firewalls")
+#prefix_list = config_eval("prefix-list-name")#[:"prefix-list-name"][0]
 username = ARGV[(ARGV.index('--username').to_i + 1)].downcase.strip
 ipaddresses = ipaddress_eval(ARGV[(ARGV.index('--ipaddress').to_i + 1)])
 comment = ARGV[(ARGV.index('--comment').to_i + 1)].strip
+
+=begin
+Evaluate the configuration parameters to ensure the required parameters are provided
+=end
+if options["firewalls"] == nil then
+  puts("The configuration file provided doesn't contain specify any firewalls.")
+  exit!
+end
+
+if options["prefix-list-name"].empty? == true then
+  puts("The configuration file provided doesn't conain a prefix-list.")
+  exit!
+end
 
 =begin
 Build the XML configuration to be pushed to the firewalls.
@@ -111,7 +126,7 @@ begin
     conf.configuration{
       conf.send(:'policy-options'){
         conf.send(:'prefix-list'){
-          conf.name("#{prefix_list}")
+          conf.name("#{options["prefix-list-name"]}")
           # Iterate through each IP address in the array.
           ipaddresses.each do |ipaddress|
             conf.send(:'prefix-list-item'){
@@ -127,9 +142,8 @@ end
 =begin
 Loop through the firewalls and push the same XML scheme to all Juniper SRX firewalls.
 =end
-firewalls[:firewalls].each do |firewall|
+options["firewalls"].each do |firewall|
   login = { :target => firewall, :username => username, :password => password}
-
   puts("Connecting to #{firewall}...")
   Netconf::SSH.new(login){ |c|
     target = 'candidate'
