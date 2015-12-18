@@ -99,8 +99,7 @@ File.open($configuration, 'r').readlines.each do |line|
     options["#{key}"] = values
   end
 end
-#firewalls = config_eval("firewalls")
-#prefix_list = config_eval("prefix-list-name")#[:"prefix-list-name"][0]
+
 username = ARGV[(ARGV.index('--username').to_i + 1)].downcase.strip
 ipaddresses = ipaddress_eval(ARGV[(ARGV.index('--ipaddress').to_i + 1)])
 comment = ARGV[(ARGV.index('--comment').to_i + 1)].strip
@@ -126,7 +125,7 @@ begin
     conf.configuration{
       conf.send(:'policy-options'){
         conf.send(:'prefix-list'){
-          conf.name("#{options["prefix-list-name"]}")
+          conf.name(options["prefix-list-name"].first)
           # Iterate through each IP address in the array.
           ipaddresses.each do |ipaddress|
             conf.send(:'prefix-list-item'){
@@ -151,8 +150,8 @@ options["firewalls"].each do |firewall|
       rsp = c.rpc.lock target
       rsp = c.rpc.edit_config(xml_config)
       rsp = c.rpc.validate target
-      if comment.empty? == true then
-        rpc = c.rpc.commit_configuration(log: "#{commit_comment}")
+      if comment.empty? == false then
+        rpc = c.rpc.commit_configuration(log: "#{comment}")
       else
         rpc = c.rpc.commit_configuration
       end
